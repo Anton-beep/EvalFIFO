@@ -41,6 +41,7 @@ const DEAL_TYPE = {
 }
 
 const TAXES_SHEET_NAME = "taxes";
+const ISIN_TAXES_SHEET_NAME = "isin_taxes";
 
 /**
  * @OnlyCurrentDoc
@@ -128,6 +129,7 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
     let resultsForNewSheet = new Map();
     let averageKurs = new Map();
     let yearStockBalance = new Map();
+    let ISINs = Set();
 
     for (let i = 0; i < dates.length; i++) {
         let bufMap = new Map();
@@ -184,7 +186,7 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
 
         if (yearStockBalance.get(key) === undefined) {
             yearStockBalance.set(key, new Map());
-        } 
+        }
         yearStockBalance.get(key).set(bufDate.getFullYear(), 0);
 
 
@@ -195,6 +197,8 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
         } else {
             averageKurs.set(key, [...averageKurs.get(key), kurses[i]]);
         }
+
+        ISINs.add(ISINs[i]);
     }
 
     // sort elemnts by dateinTypesOfDeals
@@ -232,6 +236,12 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
                 let year = Number(sheets[i].getRange(j, 1).getValue());
                 let tax = Number(sheets[i].getRange(j, 2).getValue());
                 let basiszins = Number(sheets[i].getRange(j, 3).getValue());
+                let solidar = Number(sheets[i].getRange(j, 4).getValue());
+                let kapital = Number(sheets[i].getRange(j, 5).getValue());
+                let bundesbank = Number(sheets[i].getRange(j, 6).getValue());
+                let basiszinsAnteil = Number(sheets[i].getRange(j, 7).getValue());
+                let basiszinssatz = Number(sheets[i].getRange(j, 8).getValue());
+
                 // check if year, tax, basiszins are numbers
                 if (isNaN(year)) {
                     throw "year in sheet tax is not a number (row: " + j + ")";
@@ -242,10 +252,30 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
                 if (isNaN(basiszins)) {
                     throw "basiszins in sheet tax is not a number (row: " + j + ")";
                 }
+                if (isNaN(solidar)) {
+                    throw "solidaritätszuschlag in sheet tax is not a number (row: " + j + ")";
+                }
+                if (isNaN(kapital)) {
+                    throw "kapitalertragsteuer in sheet tax is not a number (row: " + j + ")";
+                }
+                if (isNaN(bundesbank)) {
+                    throw "bundesbank in sheet tax is not a number (row: " + j + ")";
+                }
+                if (isNaN(basiszinsAnteil)) {
+                    throw "basiszinsAnteil in sheet tax is not a number (row: " + j + ")";
+                }
 
                 leftYears.splice(leftYears.indexOf(year), 1);
 
-                taxes.set(year, { "tax": tax, "basiszins": basiszins });
+                taxes.set(year, {
+                    "tax": tax,
+                    "basiszins": basiszins,
+                    "solidar": solidar,
+                    "kapital": kapital,
+                    "bundesbank": bundesbank,
+                    "basiszinsAnteil": basiszinsAnteil,
+                    "basiszinssatz": basiszinssatz
+                });
             }
         }
     }
@@ -256,6 +286,36 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
 
     if (leftYears.length > 0) {
         throw "sheet " + TAXES_SHEET_NAME + " does not contain all years, missing years: " + leftYears.join(', ');
+    }
+
+    // collect ISIN taxes
+    let ISINtaxes = new Map();
+    let leftISINs = [...ISINs];
+    let flagISINTaxSheetFound = false;
+
+    for (let i = 0; i < sheets.length; i++) {
+        if (sheets[i].getName() == ISIN_TAXES_SHEET_NAME) {
+            flagISINTaxSheetFound = true;
+
+            for (let j = 2; j <= sheets[i].getLastRow(); j++) {
+                let ISIN = sheets[i].getRange(j, 1).getValue();
+                let teilfreistellung = Number(sheets[i].getRange(j, 2).getValue());
+
+                // check if teilfreistellung is a number
+                if (isNaN(teilfreistellung)) {
+                    throw "teilfreistellung in sheet isin_taxes is not a number (row: " + j + ")";
+                }
+
+                // check if ISIN is already was in sheet
+                if (leftISINs.indexOf(ISIN) === -1) {
+                    throw "ISIN " + ISIN + " is already was in sheet isin_taxes (second appearance in row: " + j + ")";
+                }
+
+                leftISINs.splice(leftISINs.indexOf(ISIN), 1);
+
+                ISINtaxes.set(ISIN, teilfreistellung);
+            }
+        }
     }
 
     let ISINrecords = new Map();
@@ -359,7 +419,7 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
             ]]
         )
         writeColumn += 4;
-        
+
         newSheet.getRange(i + 2, writeColumn, 1, 1).setFormulaR1C1("=SEARCH_SYMBOL_YAHOO(R[0]C[-4])");
         writeColumn++;
 
@@ -381,7 +441,7 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
             writeColumn++;
         }
 
-        for (let j = 0; j < years.length; j++){
+        for (let j = 0; j < years.length; j++) {
             newSheet.getRange(i + 2, writeColumn, 1, 1).setFormulaR1C1("=GET_PRICE_FIRST_IN_YEAR_YAHOO(R[0]C[" + (-(writeColumn - 5)) + "], " + years[j] + ")");
             writeColumn++;
             newSheet.getRange(i + 2, writeColumn, 1, 1).setValue(averageKurs.get(keysNewSheet[i]).reduce((a, b) => a + b, 0) / averageKurs.get(keysNewSheet[i]).length);
