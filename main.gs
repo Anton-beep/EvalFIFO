@@ -41,6 +41,19 @@ const DEAL_TYPE = {
 }
 
 const TAXES_SHEET_NAME = "taxes";
+
+const TAXES_COLUMNS_NAMES = {
+    "year": ["jahr", "year"],
+    "tax": ["steuer", "tax"],
+    "basiszins": ["basiszins"],
+    "solidar": ["solidaritätszuschlag"],
+    "kapital": ["kapitalertragsteuer"],
+    "bbzinsen": ["bundesbank zinsen"],
+    "basiszinsAnteil": ["basiszinssatz anteil"],
+    "basiszinssatz": ["basiszinssatz"]
+}
+
+
 const ISIN_TAXES_SHEET_NAME = "isin_taxes";
 
 /**
@@ -129,7 +142,7 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
     let resultsForNewSheet = new Map();
     let averageKurs = new Map();
     let yearStockBalance = new Map();
-    let ISINs = Set();
+    let ISINsUnique = new Set();
 
     for (let i = 0; i < dates.length; i++) {
         let bufMap = new Map();
@@ -198,7 +211,7 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
             averageKurs.set(key, [...averageKurs.get(key), kurses[i]]);
         }
 
-        ISINs.add(ISINs[i]);
+        ISINsUnique.add(ISINs[i]);
     }
 
     // sort elemnts by dateinTypesOfDeals
@@ -226,71 +239,66 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
     // search for sheet name
     let sheets = ss.getSheets();
     let leftYears = [...years];
-    let flagTaxSheetFound = false;
+    let taxSheet = ss.getSheetByName(TAXES_SHEET_NAME)
 
-    for (let i = 0; i < sheets.length; i++) {
-        if (sheets[i].getName() == TAXES_SHEET_NAME) {
-            flagTaxSheetFound = true;
+    if (taxSheet === null) {
+        throw "sheet " + TAXES_SHEET_NAME + " not found";
+    }
 
-            for (let j = 2; j <= sheets[i].getLastRow(); j++) {
-                let year = Number(sheets[i].getRange(j, 1).getValue());
-                let tax = Number(sheets[i].getRange(j, 2).getValue());
-                let basiszins = Number(sheets[i].getRange(j, 3).getValue());
-                let solidar = Number(sheets[i].getRange(j, 4).getValue());
-                let kapital = Number(sheets[i].getRange(j, 5).getValue());
-                let bundesbank = Number(sheets[i].getRange(j, 6).getValue());
-                let basiszinsAnteil = Number(sheets[i].getRange(j, 7).getValue());
-                let basiszinssatz = Number(sheets[i].getRange(j, 8).getValue());
-
-                // check if year, tax, basiszins are numbers
-                if (isNaN(year)) {
-                    throw "year in sheet tax is not a number (row: " + j + ")";
-                }
-                if (isNaN(tax)) {
-                    throw "tax in sheet tax is not a number (row: " + j + ")";
-                }
-                if (isNaN(basiszins)) {
-                    throw "basiszins in sheet tax is not a number (row: " + j + ")";
-                }
-                if (isNaN(solidar)) {
-                    throw "solidaritätszuschlag in sheet tax is not a number (row: " + j + ")";
-                }
-                if (isNaN(kapital)) {
-                    throw "kapitalertragsteuer in sheet tax is not a number (row: " + j + ")";
-                }
-                if (isNaN(bundesbank)) {
-                    throw "bundesbank in sheet tax is not a number (row: " + j + ")";
-                }
-                if (isNaN(basiszinsAnteil)) {
-                    throw "basiszinsAnteil in sheet tax is not a number (row: " + j + ")";
-                }
-
-                leftYears.splice(leftYears.indexOf(year), 1);
-
-                taxes.set(year, {
-                    "tax": tax,
-                    "basiszins": basiszins,
-                    "solidar": solidar,
-                    "kapital": kapital,
-                    "bundesbank": bundesbank,
-                    "basiszinsAnteil": basiszinsAnteil,
-                    "basiszinssatz": basiszinssatz
-                });
+    // check all years are in sheet
+    let columnsAdresses = new Map();
+    let leftColumns = [...Object.keys(TAXES_COLUMNS_NAMES)];
+    for (let i = 1; i < taxSheet.getLastColumn() + 1; i++) {
+        let buf = taxSheet.getRange(1, i).getValue();
+        for (let j = 0; j < Object.keys(TAXES_COLUMNS_NAMES).length; j++) {
+            if (TAXES_COLUMNS_NAMES[Object.keys(TAXES_COLUMNS_NAMES)[j]].includes(buf.toLowerCase())) {
+                columnsAdresses.set(Object.keys(TAXES_COLUMNS_NAMES)[j], i);
+                leftColumns.splice(leftColumns.indexOf(Object.keys(TAXES_COLUMNS_NAMES)[j]), 1);
             }
         }
     }
 
-    if (!flagTaxSheetFound) {
-        throw "sheet " + TAXES_SHEET_NAME + " not found";
+    if (leftColumns.length > 0) {
+        throw "sheet " + TAXES_SHEET_NAME + " does not contain all columns, missing columns: " + leftColumns.join(', ');
+    }
+
+    let yearsRows = new Map();
+    for (let i = 2; i < taxSheet.getLastRow() + 1; i++) {
+        let year = Number(taxSheet.getRange(i, columnsAdresses.get("year")).getValue());
+
+        if (isNaN(year)) {
+            throw "sheet " + TAXES_SHEET_NAME + " contains not a number in row " + (i);
+        }
+
+        if (leftYears.indexOf(year) !== -1) {
+            leftYears.splice(leftYears.indexOf(year), 1);
+        } else {
+            throw "sheet " + TAXES_SHEET_NAME + " contains year " + year + " twice, in row " + (i);
+        }
+
+        yearsRows.set(year, i);
     }
 
     if (leftYears.length > 0) {
         throw "sheet " + TAXES_SHEET_NAME + " does not contain all years, missing years: " + leftYears.join(', ');
     }
 
+    // write all adresses in map
+    for (let i = 0; i < years.length; i++) {
+        taxes.set(years[i], {
+            "tax": `'` + TAXES_SHEET_NAME + `'!` + columnToLetter(columnsAdresses.get("tax")) + yearsRows.get(years[i]),
+            "basiszins": `'` + TAXES_SHEET_NAME + `'!` + columnToLetter(columnsAdresses.get("basiszins")) + yearsRows.get(years[i]),
+            "solidar": `'` + TAXES_SHEET_NAME + `'!` + columnToLetter(columnsAdresses.get("solidar")) + yearsRows.get(years[i]),
+            "kapital": `'` + TAXES_SHEET_NAME + `'!` + columnToLetter(columnsAdresses.get("kapital")) + yearsRows.get(years[i]),
+            "bbzinsen": `'` + TAXES_SHEET_NAME + `'!` + columnToLetter(columnsAdresses.get("bbzinsen")) + yearsRows.get(years[i]),
+            "basiszinsAnteil": `'` + TAXES_SHEET_NAME + `'!` + columnToLetter(columnsAdresses.get("basiszinsAnteil")) + yearsRows.get(years[i]),
+            "basiszinssatz": `'` + TAXES_SHEET_NAME + `'!` + columnToLetter(columnsAdresses.get("basiszinssatz")) + yearsRows.get(years[i])
+        });
+    }
+
     // collect ISIN taxes
     let ISINtaxes = new Map();
-    let leftISINs = [...ISINs];
+    let leftISINs = [...ISINsUnique];
     let flagISINTaxSheetFound = false;
 
     for (let i = 0; i < sheets.length; i++) {
@@ -307,8 +315,8 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
                 }
 
                 // check if ISIN is already was in sheet
-                if (leftISINs.indexOf(ISIN) === -1) {
-                    throw "ISIN " + ISIN + " is already was in sheet isin_taxes (second appearance in row: " + j + ")";
+                if (ISINtaxes.get(ISIN) !== undefined) {
+                    throw "ISIN " + ISIN + " was already in sheet isin_taxes (second appearance in row: " + j + ")";
                 }
 
                 leftISINs.splice(leftISINs.indexOf(ISIN), 1);
@@ -421,6 +429,7 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
         writeColumn += 4;
 
         newSheet.getRange(i + 2, writeColumn, 1, 1).setFormulaR1C1("=SEARCH_SYMBOL_YAHOO(R[0]C[-4])");
+        let symbolColumn = writeColumn;
         writeColumn++;
 
         newSheet.getRange(i + 2, writeColumn, 1, 1).setFormulaR1C1("=GET_PRICE_REAL_TIME_YAHOO(R[0]C[-1])");
@@ -450,7 +459,7 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
             writeColumn++;
             newSheet.getRange(i + 2, writeColumn, 1, 1).setValue(yearStockBalance.get(keysNewSheet[i]).get(years[j]));
             writeColumn++;
-            newSheet.getRange(i + 2, writeColumn, 1, 1).setFormulaR1C1("=IF(RC[-2]<RC[-3], 0, RC[-1]*RC[-4]*" + taxes.get(years[j]).basiszins + "*" + taxes.get(years[j]).tax + ")");
+            newSheet.getRange(i + 2, writeColumn, 1, 1).setFormula("=IF(" + columnToLetter(writeColumn - 2) + (i + 2) + "<" + columnToLetter(writeColumn - 3) + (i + 2) + ", 0, " + columnToLetter(writeColumn - 1) + (i + 2) + "*" + columnToLetter(writeColumn - 4) + (i + 2) + "*" + taxes.get(years[j]).basiszins + "*" + taxes.get(years[j]).tax + ")");
             writeColumn++;
 
             // if (resultsForNewSheet.get(keysNewSheet[i]).get(years[j]) !== undefined) {
@@ -754,4 +763,14 @@ let getPriceFromYahooRealTime = (symbol) => {
 */
 function GET_PRICE_REAL_TIME_YAHOO(symbol) {
     return getPriceFromYahooRealTime(symbol);
+}
+
+columnToLetter = (column) => {
+    var temp, letter = '';
+    while (column > 0) {
+        temp = (column - 1) % 26;
+        letter = String.fromCharCode(temp + 65) + letter;
+        column = (column - temp - 1) / 26;
+    }
+    return letter;
 }
