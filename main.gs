@@ -1,5 +1,5 @@
 const COLUMNS_NAMES = {
-    "dates": ["Abrechnungstag"],
+    "dates": ["Abrechnungstag", "Buchungsdatum"],
     "ISIN": ["ISIN"],
     "typesOfDeals": ["Transaktion", "Geschäftsart"],
     "quantities": ["Stücke/Nom.", "Anteile"],
@@ -117,6 +117,9 @@ function menuItemEval() {
 }
 
 let convertStrToDate = (str) => {
+    if (str instanceof Date) {
+        return str;
+    }
     if (str.includes(".")) {
         let buf = str.split(".");
         return new Date(buf[2], buf[1] - 1, buf[0]);
@@ -304,6 +307,11 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
         }
     }
 
+    // check that all ISINs found
+    if (leftISINs.length > 0) {
+        throw "sheet " + ISIN_TAXES_SHEET_NAME + " does not contain all ISINs, missing ISINs: " + leftISINs.join(', ');
+    }
+
     let ISINrecords = new Map();
     let result = [];
 
@@ -321,16 +329,18 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
         let nowKey = data[i].get("ISIN") + " " + data[i].get("currency");
 
         // average kurs for only unrealized
-        if (i + 1 < data.length && data[i].get("date").getFullYear() !== data[i + 1].get("date").getFullYear()) {
-            let bufRecords = ISINrecords.get(nowKey);
-            let bufAverageKurs = [];
-            for (let j = 0; j < bufRecords.length; j++) {
-                bufAverageKurs.push(bufRecords[j].get("kurs"));
+        if (ISINrecords.get(nowKey) !== undefined) {
+            if (i + 1 < data.length && data[i].get("date").getFullYear() !== data[i + 1].get("date").getFullYear()) {
+                let bufRecords = ISINrecords.get(nowKey);
+                let bufAverageKurs = [];
+                for (let j = 0; j < bufRecords.length; j++) {
+                    bufAverageKurs.push(bufRecords[j].get("kurs"));
+                }
+                if (averageKurs.get(nowKey) === undefined) {
+                    averageKurs.set(nowKey, new Map());
+                }
+                averageKurs.get(nowKey).set(data[i].get("date").getFullYear(), bufAverageKurs);
             }
-            if (averageKurs.get(nowKey) === undefined) {
-                averageKurs.set(nowKey, new Map());
-            }
-            averageKurs.get(nowKey).set(data[i].get("date").getFullYear(), bufAverageKurs);
         }
 
 
@@ -474,7 +484,7 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
         )
         writeColumn += 4;
 
-        newSheet.getRange(i + 2, writeColumn, 1, 1).setFormulaR1C1("=SEARCH_SYMBOL_YAHOO(R[0]C[-4])");
+        newSheet.getRange(i + 2, writeColumn, 1, 1).setFormulaR1C1("=SEARCH_SYMBOL_YAHOO(RC[-4])");
         let symbolColumn = writeColumn;
         writeColumn++;
 
@@ -716,6 +726,9 @@ function GET_PRICE_BY_DATE_YAHOO(symbol, date) {
 
 // year must be a number
 let getPriceFromYahooLastInYear = (symbol, year) => {
+    if (symbol === "#ERROR!") return undefined;
+    if (symbol === "#NUM!") return undefined;
+
     // Construct the URL for the Yahoo Finance.
     let url = "https://query1.finance.yahoo.com/v7/finance/download/" + symbol + "?period1=0&period2=9999999999&interval=1d&events=history&includeAdjustedClose=true";
 
@@ -754,6 +767,9 @@ function GET_PRICE_LAST_IN_YEAR_YAHOO(symbol, year) {
 
 // year must be a number
 let getPriceFromYahooFirstInYear = (symbol, year) => {
+    if (symbol === "#ERROR!") return undefined;
+    if (symbol === "#NUM!") return undefined;
+
     // Construct the URL for the Yahoo Finance.
     let url = "https://query1.finance.yahoo.com/v7/finance/download/" + symbol + "?period1=0&period2=9999999999&interval=1d&events=history&includeAdjustedClose=true";
 
@@ -787,6 +803,9 @@ function GET_PRICE_FIRST_IN_YEAR_YAHOO(symbol, year) {
 }
 
 let getPriceFromYahooRealTime = (symbol) => {
+    if (symbol === "#ERROR!") return undefined;
+    if (symbol === "#NUM!") return undefined;
+
     let url = "https://finance.yahoo.com/quote/" + symbol + "?p=" + symbol;
     let response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
 
@@ -839,3 +858,33 @@ let addDealRes = (sheet, column, row, bufResult, taxes, ISINtax, year) => {
         ]]
     );
 }
+
+// -------------------------------------------------------------------------------------------------------------------------------------------
+
+function getOnvistaPrice(fundCode) {
+  // API-URL für die Kurse von Fonds von onvista
+  const url = "https://www.onvista.de/fonds/" + fundCode + "/kurs";
+
+  // HTTP-Anfrage an die API senden
+  const response = UrlFetchApp.fetch(url);
+
+  // Antwort der API abfragen
+  if (response.getResponseCode() == 200) {
+    // Kurs des Fonds aus der Antwort der API extrahieren
+    const fundPrice = response.getContentText().split(":")[1].trim();
+
+    // Kurs des Fonds zurückgeben
+    return fundPrice;
+  } else {
+    // Fehlermeldung ausgeben
+    const errorMessage = response.getResponseCode() + ": " + response.getContentText();
+    throw new Error(errorMessage);
+  }
+}
+
+// // Beispielanwendung
+// const fundCode = "LU0348798264";
+// const fundPrice = getOnvistaPrice(fundCode);
+
+// Kurs des Fonds in einer Zelle in Google Sheets ausgeben
+// SheetApp.getActive().getRange("A1").setValue(fundPrice);
