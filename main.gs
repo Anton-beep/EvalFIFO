@@ -67,24 +67,26 @@ function menuItemEval() {
     // need to scan all data, and ask needable data for taxes, only once, then save it in PropertiesService
     let ss = SpreadsheetApp.getActiveSpreadsheet();
     let sheet = ss.getActiveSheet();
-    let data = sheet.getDataRange().getValues();
+    let data = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues().flat();
 
     let columns = { "dates": undefined, "ISIN": undefined, "typesOfDeals": undefined, "quantities": undefined, "cost": undefined, "currencies": undefined, "kurses": undefined };
 
     for (let i = 0; i < data.length; i++) {
-        if (COLUMNS_NAMES.dates.includes(data[0][i])) {
+        Logger.log(data[i]);
+
+        if (COLUMNS_NAMES.dates.includes(data[i])) {
             columns.dates = i;
-        } else if (COLUMNS_NAMES.ISIN.includes(data[0][i])) {
+        } else if (COLUMNS_NAMES.ISIN.includes(data[i])) {
             columns.ISIN = i;
-        } else if (COLUMNS_NAMES.typesOfDeals.includes(data[0][i])) {
+        } else if (COLUMNS_NAMES.typesOfDeals.includes(data[i])) {
             columns.typesOfDeals = i;
-        } else if (COLUMNS_NAMES.quantities.includes(data[0][i])) {
+        } else if (COLUMNS_NAMES.quantities.includes(data[i])) {
             columns.quantities = i;
-        } else if (COLUMNS_NAMES.cost.includes(data[0][i])) {
+        } else if (COLUMNS_NAMES.cost.includes(data[i])) {
             columns.cost = i;
-        } else if (COLUMNS_NAMES.currencies.includes(data[0][i])) {
+        } else if (COLUMNS_NAMES.currencies.includes(data[i])) {
             columns.currencies = i;
-        } else if (COLUMNS_NAMES.kurses.includes(data[0][i])) {
+        } else if (COLUMNS_NAMES.kurses.includes(data[i])) {
             columns.kurses = i;
         }
     }
@@ -113,7 +115,13 @@ function menuItemEval() {
         }
     }
 
-    evalFifo(dataToEval[0], dataToEval[1], dataToEval[2], dataToEval[3], dataToEval[4], dataToEval[5], dataToEval[6], sheet.getLastColumn() + 1);
+    Logger.log(sheet.getRange(1, sheet.getLastColumn() - 6, 1, 7).getValues().toString());
+    Logger.log([["Nettogewinne", "Gewinne/Verluste", "Teilfreistellung", "Gewinne/Verluste ohne Teilfreistellung", "Steuerabzug, eur", "Kapitalertragsteuer", "Solidaritätszuschlag"]].toString());
+    if (sheet.getRange(1, sheet.getLastColumn() - 6, 1, 7).getValues().toString() == [["Nettogewinne", "Gewinne/Verluste", "Teilfreistellung", "Gewinne/Verluste ohne Teilfreistellung", "Steuerabzug, eur", "Kapitalertragsteuer", "Solidaritätszuschlag"]].toString()) {
+        evalFifo(dataToEval[0], dataToEval[1], dataToEval[2], dataToEval[3], dataToEval[4], dataToEval[5], dataToEval[6], sheet.getLastColumn() - 6);
+    } else{
+        evalFifo(dataToEval[0], dataToEval[1], dataToEval[2], dataToEval[3], dataToEval[4], dataToEval[5], dataToEval[6], sheet.getLastColumn() + 1);
+    }
 }
 
 let convertStrToDate = (str) => {
@@ -507,7 +515,7 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
         }
 
         for (let j = 0; j < years.length; j++) {
-            newSheet.getRange(i + 2, writeColumn, 1, 1).setFormulaR1C1("=GET_PRICE_FIRST_IN_YEAR_YAHOO(R[0]C[" + (-(writeColumn - 5)) + "], " + years[j] + ")");
+            newSheet.getRange(i + 2, writeColumn, 1, 1).setFormula("=GET_PRICE_FIRST_IN_YEAR_YAHOO(" + columnToLetter(symbolColumn) + (i + 2) + '; "' + years[j] + '")');
             writeColumn++;
             if (averageKurs.get(keysNewSheet[i]).get(years[j]) === undefined) {
                 newSheet.getRange(i + 2, writeColumn, 1, 1).setValue("-");
@@ -515,11 +523,11 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
                 newSheet.getRange(i + 2, writeColumn, 1, 1).setValue(averageKurs.get(keysNewSheet[i]).get(years[j]).reduce((a, b) => a + b, 0) / averageKurs.get(keysNewSheet[i]).get(years[j]).length);
             }
             writeColumn++;
-            newSheet.getRange(i + 2, writeColumn, 1, 1).setFormulaR1C1("=GET_PRICE_LAST_IN_YEAR_YAHOO(R[0]C[" + (-(writeColumn - 5)) + "], " + years[j] + ")");
+            newSheet.getRange(i + 2, writeColumn, 1, 1).setFormula("=GET_PRICE_LAST_IN_YEAR_YAHOO(" + columnToLetter(symbolColumn) + (i + 2) + '; "' + years[j] + '")');
             writeColumn++;
             newSheet.getRange(i + 2, writeColumn, 1, 1).setValue(yearStockBalance.get(keysNewSheet[i]).get(years[j]));
             writeColumn++;
-            newSheet.getRange(i + 2, writeColumn, 1, 1).setFormula("=IF(" + columnToLetter(writeColumn - 2) + (i + 2) + "<" + columnToLetter(writeColumn - 3) + (i + 2) + ", 0, " + columnToLetter(writeColumn - 1) + (i + 2) + "*" + columnToLetter(writeColumn - 4) + (i + 2) + "*" + taxes.get(years[j]).basiszins + "*" + taxes.get(years[j]).tax + ")");
+            newSheet.getRange(i + 2, writeColumn, 1, 1).setFormula("=IF(" + columnToLetter(writeColumn - 2) + (i + 2) + "<" + columnToLetter(writeColumn - 3) + (i + 2) + "; 0; " + columnToLetter(writeColumn - 1) + (i + 2) + "*" + columnToLetter(writeColumn - 4) + (i + 2) + "*" + taxes.get(years[j]).basiszins + "*" + taxes.get(years[j]).tax + ")");
             writeColumn++;
 
             // if (resultsForNewSheet.get(keysNewSheet[i]).get(years[j]) !== undefined) {
