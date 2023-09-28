@@ -1,56 +1,53 @@
 const COLUMNS_NAMES = {
-    "dates": ["Abrechnungstag", "Buchungsdatum"],
-    "ISIN": ["ISIN"],
-    "typesOfDeals": ["Transaktion", "Geschäftsart"],
-    "quantities": ["Stücke/Nom.", "Anteile"],
-    "cost": ["Abrechnungsbetrag in Fondswährung", "Kundenendbetrag EUR"],
-    "currencies": ["Fondswährung", "Währung"],
-    "kurses": ["Abrechnungspreis", "Kurs"]
+    'cost': ['abrechnungsbetrag in fondswährung', 'kundenendbetrag eur'],
+    'currencies': ['fondswährung', 'währung'],
+    'dates': ['abrechnungstag', 'buchungsdatum'],
+    'ISIN': ['isin'],
+    'kurses': ['abrechnungspreis', 'kurs'],
+    'quantities': ['stücke/nom.', 'anteile'],
+    'typesOfDeals': ['transaktion', 'geschäftsart']
 }
 
 const DEAL_TYPE = {
-    "buy": [
-        "Kauf aus Sparplan",
-        "Kauf",
-        "Ertrag Wiederanlage",
-        "Tausch (Kauf)",
-        "Fondsmerge steuerpflichtig (Zugang)",
-        "Kauf",
-        "Tausch Gesamt (Kauf)",
-        "Fondsmerge steuerneutral (Zugang)"],
-    "sell": [
-        "Tausch (Verkauf)",
-        "Verkauf",
-        "Tausch (Verkauf)",
-        "Fondsmerge steuerpflichtig (Abgang)",
-        "Vorabpauschale Verkauf",
-        "Storno Verkauf",
-        "Tausch Gesamt (Verkauf)",
-        "Fondsmerge steuerneutral (Abgang)"],
-    "ignore": [
-        "Steuererstattung",
-        "Ertrag",
-        "Ertrag Auszahlung",
-        "Vorabpauschale Abrechnung Lastschrift",
-        "Steuererstattung",
-        "Steuerforderung",
-        "Vorabpauschale Abrechnung",
-        "Entgeltbelastung",
-        "Delta-Korrektur Abgang",
-        "Storno Ertrag ohne Wiederanlage"]
+    'buy': ['kauf aus sparplan',
+        'kauf',
+        'ertrag wiederanlage',
+        'tausch (kauf)',
+        'fondsmerge steuerpflichtig (zugang)',
+        'kauf',
+        'tausch gesamt (kauf)',
+        'fondsmerge steuerneutral (zugang)'],
+    'ignore': ['steuererstattung',
+        'ertrag',
+        'ertrag auszahlung',
+        'vorabpauschale abrechnung lastschrift',
+        'steuererstattung',
+        'steuerforderung',
+        'vorabpauschale abrechnung',
+        'entgeltbelastung',
+        'delta-korrektur abgang',
+        'storno ertrag ohne wiederanlage'],
+    'sell': ['tausch (verkauf)',
+        'verkauf',
+        'tausch (verkauf)',
+        'fondsmerge steuerpflichtig (abgang)',
+        'vorabpauschale verkauf',
+        'storno verkauf',
+        'tausch gesamt (verkauf)',
+        'fondsmerge steuerneutral (abgang)']
 }
 
-const TAXES_SHEET_NAME = "taxes";
+const TAXES_SHEET_NAME = ["taxes", "steuern_isin"];
 
 const TAXES_COLUMNS_NAMES = {
-    "year": ["jahr", "year"],
-    "tax": ["steuer", "tax"],
-    "basiszins": ["basiszins"],
-    "solidar": ["solidaritätszuschlag"],
-    "kapital": ["kapitalertragsteuer"],
-    "bbzinsen": ["bundesbank zinsen"],
-    "basiszinsAnteil": ["basiszinssatz anteil"],
-    "basiszinssatz": ["basiszinssatz"]
+    'basiszins': ['basiszins'],
+    'basiszinsanteil': ['basiszinssatz anteil'],
+    'basiszinssatz': ['basiszinssatz'],
+    'bbzinsen': ['bundesbank zinsen'],
+    'kapital': ['kapitalertragsteuer'],
+    'solidar': ['solidaritätszuschlag'],
+    'tax': ['steuer', 'tax'],
+    'year': ['jahr', 'year']
 }
 
 
@@ -72,21 +69,24 @@ function menuItemEval() {
     let columns = { "dates": undefined, "ISIN": undefined, "typesOfDeals": undefined, "quantities": undefined, "cost": undefined, "currencies": undefined, "kurses": undefined };
 
     for (let i = 0; i < data.length; i++) {
-        Logger.log(data[i]);
+        if (data[i] === undefined || typeof data[i] !== "string") {
+            continue;
+        }
+        lower_data = data[i].toLowerCase();
 
-        if (COLUMNS_NAMES.dates.includes(data[i])) {
+        if (COLUMNS_NAMES.dates.includes(lower_data)) {
             columns.dates = i;
-        } else if (COLUMNS_NAMES.ISIN.includes(data[i])) {
+        } else if (COLUMNS_NAMES.ISIN.includes(lower_data)) {
             columns.ISIN = i;
-        } else if (COLUMNS_NAMES.typesOfDeals.includes(data[i])) {
+        } else if (COLUMNS_NAMES.typesOfDeals.includes(lower_data)) {
             columns.typesOfDeals = i;
-        } else if (COLUMNS_NAMES.quantities.includes(data[i])) {
+        } else if (COLUMNS_NAMES.quantities.includes(lower_data)) {
             columns.quantities = i;
-        } else if (COLUMNS_NAMES.cost.includes(data[i])) {
+        } else if (COLUMNS_NAMES.cost.includes(lower_data)) {
             columns.cost = i;
-        } else if (COLUMNS_NAMES.currencies.includes(data[i])) {
+        } else if (COLUMNS_NAMES.currencies.includes(lower_data)) {
             columns.currencies = i;
-        } else if (COLUMNS_NAMES.kurses.includes(data[i])) {
+        } else if (COLUMNS_NAMES.kurses.includes(lower_data)) {
             columns.kurses = i;
         }
     }
@@ -115,11 +115,9 @@ function menuItemEval() {
         }
     }
 
-    Logger.log(sheet.getRange(1, sheet.getLastColumn() - 6, 1, 7).getValues().toString());
-    Logger.log([["Nettogewinne", "Gewinne/Verluste", "Teilfreistellung", "Gewinne/Verluste ohne Teilfreistellung", "Steuerabzug, eur", "Kapitalertragsteuer", "Solidaritätszuschlag"]].toString());
     if (sheet.getRange(1, sheet.getLastColumn() - 6, 1, 7).getValues().toString() == [["Nettogewinne", "Gewinne/Verluste", "Teilfreistellung", "Gewinne/Verluste ohne Teilfreistellung", "Steuerabzug, eur", "Kapitalertragsteuer", "Solidaritätszuschlag"]].toString()) {
         evalFifo(dataToEval[0], dataToEval[1], dataToEval[2], dataToEval[3], dataToEval[4], dataToEval[5], dataToEval[6], sheet.getLastColumn() - 6);
-    } else{
+    } else {
         evalFifo(dataToEval[0], dataToEval[1], dataToEval[2], dataToEval[3], dataToEval[4], dataToEval[5], dataToEval[6], sheet.getLastColumn() + 1);
     }
 }
@@ -161,13 +159,14 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
 
         bufMap.set("date", bufDate);
         bufMap.set("ISIN", ISINs[i]);
-
+        
+        dealTypeLower = typesOfDeals[i].toLowerCase();
         // figure out type of deal
-        if (DEAL_TYPE.buy.includes(typesOfDeals[i])) {
+        if (DEAL_TYPE.buy.includes(dealTypeLower)) {
             bufMap.set("typeOfDeal", "Kauf");
-        } else if (DEAL_TYPE.sell.includes(typesOfDeals[i])) {
+        } else if (DEAL_TYPE.sell.includes(dealTypeLower)) {
             bufMap.set("typeOfDeal", "Verkauf");
-        } else if (!(DEAL_TYPE.ignore.includes(typesOfDeals[i]))) {
+        } else if (!(DEAL_TYPE.ignore.includes(dealTypeLower))) {
             //SpreadsheetApp.getUi().alert("element in typesOfDeals is not a valid type (row: " + (i + 1) + ")");
             throw "element in typesOfDeals is not a valid type (row: " + (i + 2) + ")";
         }
@@ -235,10 +234,16 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
     // search for sheet name
     let sheets = ss.getSheets();
     let leftYears = [...years];
-    let taxSheet = ss.getSheetByName(TAXES_SHEET_NAME)
+    let taxSheet = null;
+    for (i = 0; i < TAXES_SHEET_NAME.length; i++) {
+        taxSheet = ss.getSheetByName(TAXES_SHEET_NAME[i])
+        if (taxSheet !== null) {
+            break;
+        }
+    }
 
     if (taxSheet === null) {
-        throw "sheet " + TAXES_SHEET_NAME + " not found";
+        throw "sheets " + TAXES_SHEET_NAME + " not found";
     }
 
     // check all years are in sheet
@@ -255,7 +260,7 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
     }
 
     if (leftColumns.length > 0) {
-        throw "sheet " + TAXES_SHEET_NAME + " does not contain all columns, missing columns: " + leftColumns.join(', ');
+        throw "sheet " + taxSheet.getName() + " does not contain all columns, missing columns: " + leftColumns.join(', ');
     }
 
     let yearsRows = new Map();
@@ -263,7 +268,7 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
         let year = Number(taxSheet.getRange(i, columnsAdresses.get("year")).getValue());
 
         if (isNaN(year)) {
-            throw "sheet " + TAXES_SHEET_NAME + " contains not a number in row " + (i);
+            throw "sheet " + taxSheet.getName() + " contains not a number in row " + (i);
         }
 
         if (leftYears.indexOf(year) !== -1) {
@@ -274,19 +279,19 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
     }
 
     if (leftYears.length > 0) {
-        throw "sheet " + TAXES_SHEET_NAME + " does not contain all years, missing years: " + leftYears.join(', ');
+        throw "sheet " + taxSheet.getName() + " does not contain all years, missing years: " + leftYears.join(', ');
     }
 
     // write all adresses in map
     for (let i = 0; i < years.length; i++) {
         taxes.set(years[i], {
-            "tax": `'` + TAXES_SHEET_NAME + `'!` + columnToLetter(columnsAdresses.get("tax")) + yearsRows.get(years[i]),
-            "basiszins": `'` + TAXES_SHEET_NAME + `'!` + columnToLetter(columnsAdresses.get("basiszins")) + yearsRows.get(years[i]),
-            "solidar": `'` + TAXES_SHEET_NAME + `'!` + columnToLetter(columnsAdresses.get("solidar")) + yearsRows.get(years[i]),
-            "kapital": `'` + TAXES_SHEET_NAME + `'!` + columnToLetter(columnsAdresses.get("kapital")) + yearsRows.get(years[i]),
-            "bbzinsen": `'` + TAXES_SHEET_NAME + `'!` + columnToLetter(columnsAdresses.get("bbzinsen")) + yearsRows.get(years[i]),
-            "basiszinsAnteil": `'` + TAXES_SHEET_NAME + `'!` + columnToLetter(columnsAdresses.get("basiszinsAnteil")) + yearsRows.get(years[i]),
-            "basiszinssatz": `'` + TAXES_SHEET_NAME + `'!` + columnToLetter(columnsAdresses.get("basiszinssatz")) + yearsRows.get(years[i])
+            "tax": `'` + taxSheet.getName() + `'!` + columnToLetter(columnsAdresses.get("tax")) + yearsRows.get(years[i]),
+            "basiszins": `'` + taxSheet.getName() + `'!` + columnToLetter(columnsAdresses.get("basiszins")) + yearsRows.get(years[i]),
+            "solidar": `'` + taxSheet.getName() + `'!` + columnToLetter(columnsAdresses.get("solidar")) + yearsRows.get(years[i]),
+            "kapital": `'` + taxSheet.getName() + `'!` + columnToLetter(columnsAdresses.get("kapital")) + yearsRows.get(years[i]),
+            "bbzinsen": `'` + taxSheet.getName() + `'!` + columnToLetter(columnsAdresses.get("bbzinsen")) + yearsRows.get(years[i]),
+            "basiszinsAnteil": `'` + taxSheet.getName() + `'!` + columnToLetter(columnsAdresses.get("basiszinsAnteil")) + yearsRows.get(years[i]),
+            "basiszinssatz": `'` + taxSheet.getName() + `'!` + columnToLetter(columnsAdresses.get("basiszinssatz")) + yearsRows.get(years[i])
         });
     }
 
@@ -294,26 +299,39 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
     let ISINtaxes = new Map();
     let leftISINs = [...ISINsUnique];
     let flagISINTaxSheetFound = false;
-
-    for (let i = 0; i < sheets.length; i++) {
-        if (sheets[i].getName() == ISIN_TAXES_SHEET_NAME) {
-            flagISINTaxSheetFound = true;
-
-            for (let j = 2; j <= sheets[i].getLastRow(); j++) {
-                let ISIN = sheets[i].getRange(j, 1).getValue();
-                let teilfreistellung = `'` + ISIN_TAXES_SHEET_NAME + `'!` + columnToLetter(2) + j;
-
-                // check if ISIN is already was in sheet
-                if (ISINtaxes.get(ISIN) !== undefined) {
-                    throw "ISIN " + ISIN + " was already in sheet isin_taxes (second appearance in row: " + j + ")";
-                }
-
-                leftISINs.splice(leftISINs.indexOf(ISIN), 1);
-
-                ISINtaxes.set(ISIN, teilfreistellung);
-            }
+    
+    // searching for columns in sheet
+    let ISINColumns = {"ISIN": undefined, "teilfreistellung": undefined};
+    for (i = 1; i < taxSheet.getLastColumn() + 1; i++) {
+        let buf = taxSheet.getRange(1, i).getValue();
+        if (buf.toLowerCase() === "isin") {
+            ISINColumns.ISIN = i;
+        } else if (buf.toLowerCase() === "teilfreistellung") {
+            ISINColumns.teilfreistellung = i;
         }
     }
+
+    // check undefined columns
+    for (i = 0; i < Object.keys(ISINColumns).length; i++) {
+        if (ISINColumns[Object.keys(ISINColumns)[i]] === undefined) {
+            throw "sheet " + taxSheet.getName() + " does not contain column " + Object.keys(ISINColumns)[i];
+        }
+    }
+
+    for (let j = 2; j <= taxSheet.getLastRow(); j++) {
+        let ISIN = taxSheet.getRange(j, ISINColumns.ISIN).getValue();
+        let teilfreistellung = `'` + taxSheet.getName() + `'!` + columnToLetter(ISINColumns.teilfreistellung) + j;
+
+        // check if ISIN is already was in sheet
+        if (ISINtaxes.get(ISIN) !== undefined) {
+            throw "ISIN " + ISIN + " was already in sheet isin_taxes (second appearance in row: " + j + ")";
+        }
+
+        leftISINs.splice(leftISINs.indexOf(ISIN), 1);
+
+        ISINtaxes.set(ISIN, teilfreistellung);
+    }
+
 
     // check that all ISINs found
     if (leftISINs.length > 0) {
@@ -371,7 +389,8 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
             let [bufRecords, bufBalance, bufResult] = processDeal(records, balance, lastDeal);
             ISINrecords.set(nowKey, bufRecords);
             currentBalace.set(nowKey, bufBalance);
-
+            
+            Logger.log(ISINtaxes.get(nowKey.split(" ")[0]))
             addDealRes(sheet, columnToPasteRes, i + 2, bufResult, taxes, ISINtaxes.get(nowKey.split(" ")[0]), data[i].get("date").getFullYear());
             resultsForNewSheet.get(nowKey).set(data[i].get("date").getFullYear(), resultsForNewSheet.get(nowKey).get(data[i].get("date").getFullYear()) + bufResult);
         } else if (currentBalace.get(nowKey) < 0 && data[i].get("typeOfDeal") === "Kauf") {
@@ -383,7 +402,8 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
             let [bufRecords, bufBalance, bufResult] = processDeal(records, balance, lastDeal);
             ISINrecords.set(nowKey, bufRecords);
             currentBalace.set(nowKey, bufBalance);
-
+            
+            Logger.log(ISINtaxes.get(nowKey.split(" ")[0]))
             addDealRes(sheet, columnToPasteRes, i + 2, bufResult, taxes, ISINtaxes.get(nowKey.split(" ")[0]), data[i].get("date").getFullYear());
             resultsForNewSheet.get(nowKey).set(data[i].get("date").getFullYear(), resultsForNewSheet.get(nowKey).get(data[i].get("date").getFullYear()) + bufResult);
         } else if (currentBalace.get(nowKey) < 0) {
@@ -529,34 +549,7 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
             writeColumn++;
             newSheet.getRange(i + 2, writeColumn, 1, 1).setFormula("=IF(" + columnToLetter(writeColumn - 2) + (i + 2) + "<" + columnToLetter(writeColumn - 3) + (i + 2) + "; 0; " + columnToLetter(writeColumn - 1) + (i + 2) + "*" + columnToLetter(writeColumn - 4) + (i + 2) + "*" + taxes.get(years[j]).basiszins + "*" + taxes.get(years[j]).tax + ")");
             writeColumn++;
-
-            // if (resultsForNewSheet.get(keysNewSheet[i]).get(years[j]) !== undefined) {
-            //     let firstInYear = getPriceFromYahooFirstInYear(resultsForNewSheet.get(keysNewSheet[i]).get("symbol"), years[j]); //P0
-            //     let lastInYear = getPriceFromYahooLastInYear(resultsForNewSheet.get(keysNewSheet[i]).get("symbol"), years[j]); //P2
-            //     let avg = averageKurs.get(keysNewSheet[i]).reduce((a, b) => a + b, 0) / averageKurs.get(keysNewSheet[i]).length; //P1
-            //     if (lastInYear < avg) {
-            //         newSheet.getRange(i + 2, 9 + years.length + j, 1, 1).setValue(0)
-            //     } else {
-            //         let tax = currentBalace.get(keysNewSheet[i]) * firstInYear * taxes.get(years[j]).basiszins * taxes.get(years[j]).tax;
-            //         newSheet.getRange(i + 2, 9 + years.length + j, 1, 1).setValue(tax);
-            //     }
-            // } else {
-            //     newSheet.getRange(i + 2, 9 + years.length + j, 1, 1).setValue("-");
-            // }
         }
-
-
-        // newSheet.getRange(i + 2, 1, 1, headers.length).setValues([
-        //     [
-        //         keysNewSheet[i].split(" ")[0],
-        //         keysNewSheet[i].split(" ")[1],
-        //         currentBalace.get(keysNewSheet[i]),
-        //         -1 * bufCost,
-        //         ,
-        //         currentBalace.get(keysNewSheet[i]) * resultsForNewSheet.get(keysNewSheet[i]).get("kurs"),
-        //         currentBalace.get(keysNewSheet[i]) * resultsForNewSheet.get(keysNewSheet[i]).get("kurs") + -1 * averageKurs.get(keysNewSheet[i]).reduce((a, b) => a + b, 0) / averageKurs.get(keysNewSheet[i]).length,
-        //     ]
-        // ]);
     }
 
     // two decimal places for all cells
@@ -579,47 +572,6 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
 
     // resize all columns to fit content
     newSheet.autoResizeColumns(1, headers.length);
-
-    // result[0].push(...headers);
-
-    // for (let i = 0; i < keysNewSheet.length; i++) {
-    //     result[i + 1].push(keysNewSheet[i].split(" ")[0]);
-    //     result[i + 1].push(resultsForNewSheet.get(keysNewSheet[i]).get("notation"));
-    //     result[i + 1].push(currentBalace.get(keysNewSheet[i]));
-    //     let bufCost = 0;
-    //     for (let j = 0; j < ISINrecords.get(keysNewSheet[i]).length; j++) {
-    //         bufCost += ISINrecords.get(keysNewSheet[i])[j].get("kurs") * ISINrecords.get(keysNewSheet[i])[j].get("quantity");
-    //     }
-    //     result[i + 1].push(-1 * bufCost);
-    //     result[i + 1].push(resultsForNewSheet.get(keysNewSheet[i]).get("kurs"));
-    //     result[i + 1].push(currentBalace.get(keysNewSheet[i]) * resultsForNewSheet.get(keysNewSheet[i]).get("kurs"));
-    //     result[i + 1].push(currentBalace.get(keysNewSheet[i]) * resultsForNewSheet.get(keysNewSheet[i]).get("kurs") + -1 * bufCost);
-    //     result[i + 1].push(keysNewSheet[i].split(" ")[1]);
-    //     for (let j = 0; j < years.length; j++) {
-    //         if (resultsForNewSheet.get(keysNewSheet[i]).get(years[j]) !== undefined) {
-    //             result[i + 1].push(resultsForNewSheet.get(keysNewSheet[i]).get(years[i]));
-    //         } else {
-    //             result[i + 1].push("-");
-    //         }
-    //     }
-
-    //     // counting tax
-    //     for (let j = 0; j < years.length; j++) {
-    //         if (resultsForNewSheet.get(keysNewSheet[i]).get(years[j]) !== undefined) {
-    //             let firstInYear = getPriceFromYahooFirstInYear(resultsForNewSheet.get(keysNewSheet[i]).get("symbol"), years[j]);
-    //             let lastInYear = getPriceFromYahooLastInYear(resultsForNewSheet.get(keysNewSheet[i]).get("symbol"), years[j]);
-    //             let avg = averageKurs.get(keysNewSheet[i]).reduce((a, b) => a + b, 0) / averageKurs.get(keysNewSheet[i]).length;
-    //             if (lastInYear < avg) {
-    //                 result[i + 1].push(0)
-    //             } else {
-    //                 let tax = currentBalace.get(keysNewSheet[i]) * firstInYear * taxes.get(years[j]).basiszins * taxes.get(years[j]).tax;
-    //                 result[i + 1].push(tax);
-    //             }
-    //         } else {
-    //             result[i + 1].push("-");
-    //         }
-    //     }
-    // }
 }
 
 let processDeal = (records, balance, lastDeal) => {
@@ -870,24 +822,24 @@ let addDealRes = (sheet, column, row, bufResult, taxes, ISINtax, year) => {
 // -------------------------------------------------------------------------------------------------------------------------------------------
 
 function getOnvistaPrice(fundCode) {
-  // API-URL für die Kurse von Fonds von onvista
-  const url = "https://www.onvista.de/fonds/" + fundCode + "/kurs";
+    // API-URL für die Kurse von Fonds von onvista
+    const url = "https://www.onvista.de/fonds/" + fundCode + "/kurs";
 
-  // HTTP-Anfrage an die API senden
-  const response = UrlFetchApp.fetch(url);
+    // HTTP-Anfrage an die API senden
+    const response = UrlFetchApp.fetch(url);
 
-  // Antwort der API abfragen
-  if (response.getResponseCode() == 200) {
-    // Kurs des Fonds aus der Antwort der API extrahieren
-    const fundPrice = response.getContentText().split(":")[1].trim();
+    // Antwort der API abfragen
+    if (response.getResponseCode() == 200) {
+        // Kurs des Fonds aus der Antwort der API extrahieren
+        const fundPrice = response.getContentText().split(":")[1].trim();
 
-    // Kurs des Fonds zurückgeben
-    return fundPrice;
-  } else {
-    // Fehlermeldung ausgeben
-    const errorMessage = response.getResponseCode() + ": " + response.getContentText();
-    throw new Error(errorMessage);
-  }
+        // Kurs des Fonds zurückgeben
+        return fundPrice;
+    } else {
+        // Fehlermeldung ausgeben
+        const errorMessage = response.getResponseCode() + ": " + response.getContentText();
+        throw new Error(errorMessage);
+    }
 }
 
 // // Beispielanwendung
