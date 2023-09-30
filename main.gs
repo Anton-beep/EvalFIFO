@@ -349,10 +349,14 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
 
     let ISINrecords = new Map();
 
-    // write result column 
     const sheet = ss.getActiveSheet();
 
+    // write headers
     let headers = ["Nettogewinne", "Gewinne/Verluste", "Teilfreistellung", "Gewinne/Verluste ohne Teilfreistellung", "Steuerabzug, eur", "Kapitalertragsteuer", "Solidaritätszuschlag"];
+    for (let i = columnToPasteRes; i < headers.length + columnToPasteRes; i++){
+        sheet.getRange(1, i).setValue(headers[i - columnToPasteRes]);
+    }
+
 
     for (let i = 0; i < data.length; i++) {
         let nowKey = data[i].get("ISIN") + " " + data[i].get("currency");
@@ -480,7 +484,7 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
     let keysNewSheet = Array.from(resultsForNewSheet.keys());
 
     // check if list with name Ergebnisse (script) is already exist
-    let name = "Ergebnisse (script)";
+    let name = "Erg.(script)";
     let nowDate = new Date();
     nowDate.setHours(nowDate.getHours() + 2);
     if (ss.getSheetByName(name) !== null) {
