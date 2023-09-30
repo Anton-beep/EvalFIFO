@@ -4,10 +4,11 @@ const COLUMNS_NAMES = {
     "cost": ["abrechnungsbetrag in fondswährung", "kundenendbetrag eur"],
     "currencies": ["fondswährung", "währung"],
     "dates": ["abrechnungstag", "buchungsdatum"],
-    "ISIN": ["isin"],
+    "ISINs": ["isin"],
     "kurses": ["abrechnungspreis", "kurs"],
     "quantities": ["stücke/nom.", "anteile"],
-    "typesOfDeals": ["transaktion", "geschäftsart"]
+    "typesOfDeals": ["transaktion", "geschäftsart"],
+    "clearCost": ["kurswert eur"]
 }
 
 const DEAL_TYPE = {
@@ -54,6 +55,31 @@ const TAXES_COLUMNS_NAMES = {
 
 const ISIN_TAXES_SHEET_NAME = "isin_taxes";
 
+class ColumnWriter {
+    constructor(sheet, column, row) {
+        this.sheet = sheet;
+        this.column = column;
+        this.row = row;
+    }
+
+    write(data){
+        this.sheet.getRange(this.row, this.column).setValue(data);
+        this.column++;
+        return this.column - 1;
+    }
+
+    setFormula(formula){
+        this.sheet.getRange(this.row, this.column).setFormula(formula);
+        this.column++;
+        return this.column - 1;
+    }
+
+    nextRow(){
+        this.column = 1;
+        this.row++;
+    }
+}
+
 /**
  * @OnlyCurrentDoc
  */
@@ -67,18 +93,18 @@ function menuItemEval() {
     let sheet = ss.getActiveSheet();
     let data = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues().flat();
 
-    let columns = { "dates": undefined, "ISIN": undefined, "typesOfDeals": undefined, "quantities": undefined, "cost": undefined, "currencies": undefined, "kurses": undefined };
+    let columns = { "dates": undefined, "ISINs": undefined, "typesOfDeals": undefined, "quantities": undefined, "cost": undefined, "currencies": undefined, "kurses": undefined };
 
     for (let i = 0; i < data.length; i++) {
         if (data[i] === undefined || typeof data[i] !== "string") {
             continue;
         }
-        lower_data = data[i].toLowerCase();
+        let lower_data = data[i].toLowerCase();
 
         if (COLUMNS_NAMES.dates.includes(lower_data)) {
             columns.dates = i;
-        } else if (COLUMNS_NAMES.ISIN.includes(lower_data)) {
-            columns.ISIN = i;
+        } else if (COLUMNS_NAMES.ISINs.includes(lower_data)) {
+            columns.ISINs = i;
         } else if (COLUMNS_NAMES.typesOfDeals.includes(lower_data)) {
             columns.typesOfDeals = i;
         } else if (COLUMNS_NAMES.quantities.includes(lower_data)) {
@@ -89,40 +115,50 @@ function menuItemEval() {
             columns.currencies = i;
         } else if (COLUMNS_NAMES.kurses.includes(lower_data)) {
             columns.kurses = i;
+        } else if (COLUMNS_NAMES.clearCost.includes(lower_data)) {
+            columns.clearCost = i;
         }
     }
 
     // check all columns are found and return missing column in alert
-    let dataToEval = [];
+    let outData = {
+        "dates": undefined,
+        "ISINs": undefined,
+        "typesOfDeals": undefined,
+        "quantities": undefined,
+        "cost": undefined,
+        "currencies": undefined,
+        "kurses": undefined,
+        "clearCost" : undefined
+    }
+
     let keys = Object.keys(columns);
 
     for (let i = 0; i < keys.length; i++) {
         if (columns[keys[i]] === undefined) {
-            //SpreadsheetApp.getUi().alert("column " + keys[i] + " is missing");
             throw "column " + keys[i] + " is missing";
         }
 
-        let range = sheet.getRange(2, columns[keys[i]] + 1, sheet.getLastRow() - 1, 1);
-        let data = range.getValues().flat();
-        dataToEval.push(data);
+        outData[keys[i]] = sheet.getRange(2, columns[keys[i]] + 1, sheet.getLastRow() - 1, 1).getValues().flat();
     }
 
     // check if all input arguments have the same length
-    let length = dataToEval[0].length;
-    for (let i = 1; i < dataToEval.length; i++) {
-        if (dataToEval[i].length !== length) {
+    let length = outData[keys[0]].length;
+    for (let i = 1; i < keys.length; i++) {
+        if (outData[keys[i]].length !== length) {
             //SpreadsheetApp.getUi().alert("input arguments have different length");
             throw "input arguments have different length";
         }
     }
+
     
     let lastColInd = sheet.getLastColumn();
     if (sheet.getRange(1, lastColInd - 6, 1, 7).getValues().toString() === [["Nettogewinne", "Gewinne/Verluste", "Teilfreistellung", "Gewinne/Verluste ohne Teilfreistellung", "Steuerabzug, eur", "Kapitalertragsteuer", "Solidaritätszuschlag"]].toString()) {
         // clear old results
         sheet.getRange(1, lastColInd - 6, sheet.getLastRow(), 7).clearContent();
-        evalFifo(dataToEval[0], dataToEval[1], dataToEval[2], dataToEval[3], dataToEval[4], dataToEval[5], dataToEval[6], lastColInd - 6);
+        evalFifo(outData, lastColInd - 6);
     } else {
-        evalFifo(dataToEval[0], dataToEval[1], dataToEval[2], dataToEval[3], dataToEval[4], dataToEval[5], dataToEval[6], lastColInd + 1);
+        evalFifo(outData, lastColInd + 1);
     }
 }
 
@@ -141,9 +177,9 @@ let convertStrToDate = (str) => {
     return Date.parse(str);
 }
 
-let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses, columnToPasteRes) => {
+let evalFifo = (inData, columnToPasteRes) => {
     // getting all data from input aguments in an array of maps
-    var ss = SpreadsheetApp.getActiveSpreadsheet()
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
     let data = [];
     let currentBalace = new Map();
     let resultsForNewSheet = new Map();
@@ -151,12 +187,12 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
     let yearStockBalance = new Map();
     let ISINsUnique = new Set();
 
-    for (let i = 0; i < dates.length; i++) {
+    for (let i = 0; i < inData.dates.length; i++) {
         let bufMap = new Map();
 
-        bufMap.set("addresToWrite", i + 2)
+        bufMap.set("addressToWrite", i + 2)
 
-        let bufDate = convertStrToDate(dates[i]);
+        let bufDate = convertStrToDate(inData.dates[i]);
 
         if (isNaN(bufDate)) {
             //SpreadsheetApp.getUi().alert("element in dates is not a date (row: " + (i + 1) + ")");
@@ -164,9 +200,9 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
         }
 
         bufMap.set("date", bufDate);
-        bufMap.set("ISIN", ISINs[i]);
+        bufMap.set("ISIN", inData.ISINs[i]);
 
-        dealTypeLower = typesOfDeals[i].toLowerCase();
+        let dealTypeLower = inData.typesOfDeals[i].toLowerCase();
         // figure out type of deal
         if (DEAL_TYPE.buy.includes(dealTypeLower)) {
             bufMap.set("typeOfDeal", "Kauf");
@@ -177,34 +213,42 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
             throw "element in typesOfDeals is not a valid type (row: " + (i + 2) + ")";
         }
 
-        if (isNaN(quantities[i])) {
+        if (isNaN(inData.quantities[i])) {
             //SpreadsheetApp.getUi().alert("element in quantities is not a number (row: " + (i + 1) + ")");
             throw "element in quantities is not a number (row: " + (i + 2) + ")";
         }
-        if (bufMap.get("typeOfDeal") === "Verkauf" && quantities[i] > 0) {
-            bufMap.set("quantity", -quantities[i]);
+        if (bufMap.get("typeOfDeal") === "Verkauf" && inData.quantities[i] > 0) {
+            bufMap.set("quantity", -inData.quantities[i]);
         } else {
-            bufMap.set("quantity", quantities[i]);
+            bufMap.set("quantity", inData.quantities[i]);
         }
 
-        if (isNaN(cost[i])) {
+        if (isNaN(inData.cost[i])) {
             throw "element in cost is not a number (row: " + (i + 2) + ")";
-        } else if (cost[i] === undefined || cost[i] === null || cost[i] === "") {
+        } else if (inData.cost[i] === undefined || inData.cost[i] === null || inData.cost[i] === "") {
             throw "zero value in cost (row: " + (i + 2) + ")";
         }
 
-        if (bufMap.get("typeOfDeal") === "Verkauf" && cost[i] < 0) {
-            bufMap.set("cost", -cost[i]);
+        if (bufMap.get("typeOfDeal") === "Verkauf" && inData.cost[i] < 0) {
+            bufMap.set("cost", -inData.cost[i]);
         } else {
-            bufMap.set("cost", cost[i]);
+            bufMap.set("cost", inData.cost[i]);
         }
-        bufMap.set("kurs", Math.abs(cost[i] / bufMap.get("quantity")));
 
-        bufMap.set("currency", currencies[i]);
+        if (bufMap.get("typeOfDeal") === "Verkauf" && inData.clearCost[i] < 0) {
+            bufMap.set("clearCost", -inData.clearCost[i]);
+        } else {
+            bufMap.set("clearCost", inData.clearCost[i]);
+        }
+
+        bufMap.set("kurs", Math.abs(inData.cost[i] / bufMap.get("quantity")));
+        bufMap.set("clearKurs", Math.abs(inData.clearCost[i] / bufMap.get("quantity")));
+
+        bufMap.set("currency", inData.currencies[i]);
 
         data.push(bufMap);
 
-        let key = ISINs[i] + " " + currencies[i]
+        let key = inData.ISINs[i] + " " + inData.currencies[i]
         currentBalace.set(key, 0);
 
         if (resultsForNewSheet.get(key) === undefined) {
@@ -217,21 +261,12 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
         }
         yearStockBalance.get(key).set(bufDate.getFullYear(), 0);
 
-        ISINsUnique.add(ISINs[i]);
+        ISINsUnique.add(inData.ISINs[i]);
     }
 
     // sort elemnts by dateinTypesOfDeals
     data.sort((a, b) => a.get("date") - b.get("date"));
 
-    // for (let i = 0; i < keysNewSheet.length; i++) {
-    //     let bufMap = resultsForNewSheet.get(keysNewSheet[i]);
-    //     bufMap.set("symbol", searchForSymbolYahoo(resultsForNewSheet.get(keysNewSheet[i]).get("notation")))
-    //     bufMap.set("kurs", getPriceFromYahooRealTime(bufMap.get("symbol")));
-    //     bufMap.set("quantity", 0);
-    //     bufMap.set("kurswert", 0);
-    //     bufMap.set("kundenendbetrag", 0);
-    //     bufMap.set("papiergewinne", 0);
-    // }
 
     // create array of years from data
     let years = [];
@@ -402,7 +437,7 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
 
             //Logger.log(ISINtaxes.get(nowKey.split(" ")[0]))
             //Logger.log("write to row %s result %s", data[i].get("addresToWrite"), bufResult)
-            addDealRes(sheet, columnToPasteRes, data[i].get("addresToWrite"), bufResult, taxes, ISINtaxes.get(nowKey.split(" ")[0]), data[i].get("date").getFullYear());
+            addDealRes(sheet, columnToPasteRes, data[i].get("addressToWrite"), bufResult, taxes, ISINtaxes.get(nowKey.split(" ")[0]), data[i].get("date").getFullYear());
             resultsForNewSheet.get(nowKey).set(data[i].get("date").getFullYear(), resultsForNewSheet.get(nowKey).get(data[i].get("date").getFullYear()) + bufResult);
         } else if (currentBalace.get(nowKey) < 0 && data[i].get("typeOfDeal") === "Kauf") {
             throw "short detected in row " + (i + 2);
@@ -467,19 +502,9 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
     sheet.autoResizeColumns(columnToPasteRes, headers.length);
 
     // write header
-    headers = ['ISIN', 'Währung', 'Positionen Stücke', 'Kundenendbetrag', 'Symbol (von https://finance.yahoo.com/)', 'Kurs (von https://finance.yahoo.com/)', 'Kurswert', 'Papiergewinne'];
-
-    for (let i = 0; i < years.length; i++) {
-        headers.push("Realisierte Gewinne/Verluste, " + years[i]);
-    }
-
-    for (let i = 0; i < years.length; i++) {
-        headers.push("Price for 01 Jan " + years[i]);
-        headers.push("Average kurs of buying in (unrealized only)" + years[i]);
-        headers.push("Price for 31 Dec " + years[i]);
-        headers.push("Positionen Stücke " + years[i]);
-        headers.push("Nicht realisierte tax, " + years[i])
-    }
+    headers = ['ISIN', 'Symbol (von https://finance.yahoo.com/)', 'Währung', 'Positionen Stücke', 'Transaktionskosten, Unrealisiert',
+        'Kundenendbetrag ohne Transaktstionskosten', 'Preis (von https://finance.yahoo.com/)', 'Kurswert', 'Papiergewinne', 'Preis, T-30', '%%, T vs T-30',
+        'Preis, T-90', '%%, T vs T-90', 'Preis, T-365', '%%, T vs T-365', 'Kundenendbetrag ohne Transaktstionskosten, abs'];
 
     let keysNewSheet = Array.from(resultsForNewSheet.keys());
 
@@ -494,66 +519,41 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
 
     let newSheet = ss.insertSheet(name);
     newSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    const writer = new ColumnWriter(newSheet, 1, 2);
 
     for (let i = 0; i < keysNewSheet.length; i++) {
-        let writeColumn = 1;
+        let ISINColumn = writer.write(keysNewSheet[i].split(" ")[0]);
+        let columnWithSymbol = writer.setFormula("=SEARCH_SYMBOL_YAHOO(" + columnToLetter(ISINColumn) + writer.row + ")");
+        writer.write(keysNewSheet[i].split(" ")[1]);
+        let posColumn = writer.write(currentBalace.get(keysNewSheet[i]));
+        let clearBufCost = 0;
         let bufCost = 0;
         for (let j = 0; j < ISINrecords.get(keysNewSheet[i]).length; j++) {
+            clearBufCost += ISINrecords.get(keysNewSheet[i])[j].get("clearKurs") * ISINrecords.get(keysNewSheet[i])[j].get("quantity");
             bufCost += ISINrecords.get(keysNewSheet[i])[j].get("kurs") * ISINrecords.get(keysNewSheet[i])[j].get("quantity");
         }
+        writer.write(clearBufCost - bufCost);
+        let priceRealColumn = writer.write(-clearBufCost);
+        let kursColumn = writer.setFormula("=GET_PRICE_REAL_TIME_YAHOO(" + columnToLetter(columnWithSymbol) + writer.row + ")");
+        let kursTotalColumn = writer.setFormula("=" + columnToLetter(kursColumn) + writer.row + "*" + columnToLetter(posColumn) + writer.row);
+        writer.setFormula("=" + columnToLetter(kursTotalColumn) + writer.row + "+" + columnToLetter(priceRealColumn) + writer.row);
+        let T_30Column = writer.setFormula("=GET_PRICE_30_DAYS_YAHOO(" + columnToLetter(columnWithSymbol) + writer.row + ")");
+        writer.setFormula("=IF(" + columnToLetter(T_30Column) + writer.row + "=0" + ",," + columnToLetter(kursColumn) + writer.row + "/" + columnToLetter(T_30Column) + writer.row + "-1)");
+        let T_90Column = writer.setFormula("=GET_PRICE_90_DAYS_YAHOO(" + columnToLetter(columnWithSymbol) + writer.row + ")");
+        writer.setFormula("=IF(" + columnToLetter(T_90Column) + writer.row + "=0" + ",," + columnToLetter(kursColumn) + writer.row + "/" + columnToLetter(T_90Column) + writer.row + "-1)");
+        let T_365Column = writer.setFormula("=GET_PRICE_365_DAYS_YAHOO(" + columnToLetter(columnWithSymbol) + writer.row + ")");
+        writer.setFormula("=IF(" + columnToLetter(T_365Column) + writer.row + "=0" + ",," + columnToLetter(kursColumn) + writer.row + "/" + columnToLetter(T_365Column) + writer.row + "-1)");
+        writer.setFormula("=abs(" + columnToLetter(priceRealColumn) + writer.row + ")");
 
-        newSheet.getRange(i + 2, writeColumn, 1, 4).setValues(
-            [[
-                keysNewSheet[i].split(" ")[0],
-                keysNewSheet[i].split(" ")[1],
-                currentBalace.get(keysNewSheet[i]),
-                -1 * bufCost
-            ]]
-        )
-        writeColumn += 4;
-
-        newSheet.getRange(i + 2, writeColumn, 1, 1).setFormulaR1C1("=SEARCH_SYMBOL_YAHOO(RC[-4])");
-        let symbolColumn = writeColumn;
-        writeColumn++;
-
-        newSheet.getRange(i + 2, writeColumn, 1, 1).setFormulaR1C1("=GET_PRICE_REAL_TIME_YAHOO(R[0]C[-1])");
-        writeColumn++;
-
-        newSheet.getRange(i + 2, writeColumn, 1, 1).setFormulaR1C1("=RC[-4]*RC[-1]");
-        writeColumn++;
-
-        newSheet.getRange(i + 2, writeColumn, 1, 1).setFormulaR1C1("=RC[-1]-RC[-4]");
-        writeColumn++;
-
-        for (let j = 0; j < years.length; j++) {
-            if (resultsForNewSheet.get(keysNewSheet[i]).get(years[j]) !== undefined) {
-                newSheet.getRange(i + 2, writeColumn, 1, 1).setValue(resultsForNewSheet.get(keysNewSheet[i]).get(years[j]));
-            } else {
-                newSheet.getRange(i + 2, writeColumn, 1, 1).setValue("-");
-            }
-            writeColumn++;
-        }
-
-        for (let j = 0; j < years.length; j++) {
-            newSheet.getRange(i + 2, writeColumn, 1, 1).setFormula("=GET_PRICE_FIRST_IN_YEAR_YAHOO(" + columnToLetter(symbolColumn) + (i + 2) + '; "' + years[j] + '")');
-            writeColumn++;
-            if (averageKurs.get(keysNewSheet[i]).get(years[j]) === undefined) {
-                newSheet.getRange(i + 2, writeColumn, 1, 1).setValue("-");
-            } else {
-                newSheet.getRange(i + 2, writeColumn, 1, 1).setValue(averageKurs.get(keysNewSheet[i]).get(years[j]).reduce((a, b) => a + b, 0) / averageKurs.get(keysNewSheet[i]).get(years[j]).length);
-            }
-            writeColumn++;
-            newSheet.getRange(i + 2, writeColumn, 1, 1).setFormula("=GET_PRICE_LAST_IN_YEAR_YAHOO(" + columnToLetter(symbolColumn) + (i + 2) + '; "' + years[j] + '")');
-            writeColumn++;
-            newSheet.getRange(i + 2, writeColumn, 1, 1).setValue(yearStockBalance.get(keysNewSheet[i]).get(years[j]));
-            writeColumn++;
-            newSheet.getRange(i + 2, writeColumn, 1, 1).setFormula("=IF(" + columnToLetter(writeColumn - 2) + (i + 2) + "<" + columnToLetter(writeColumn - 3) + (i + 2) + "; 0; " + columnToLetter(writeColumn - 1) + (i + 2) + "*" + columnToLetter(writeColumn - 4) + (i + 2) + "*" + taxes.get(years[j]).basiszins + "*" + taxes.get(years[j]).tax + ")");
-            writeColumn++;
-        }
+        writer.nextRow();
     }
 
     // two decimal places for all cells
     newSheet.getRange(2, 1, newSheet.getLastRow() - 1, headers.length).setNumberFormat("#,##0.00");
+
+    newSheet.getRange(2, 11, newSheet.getLastRow() - 1, 1).setNumberFormat("#%");
+    newSheet.getRange(2, 13, newSheet.getLastRow() - 1, 1).setNumberFormat("#%");
+    newSheet.getRange(2, 15, newSheet.getLastRow() - 1, 1).setNumberFormat("#%");
 
     rules = [
         SpreadsheetApp.newConditionalFormatRule().whenCellEmpty().setBackground('#F4D03F'),
@@ -625,19 +625,29 @@ let searchForSymbolYahoo = (inData) => {
     // Returns:
     //     string: The symbol for the share, or undefined if not found.
     //
-    let url = 'https://query1.finance.yahoo.com/v1/finance/search?q=' + inData + '&quotesCount=1&newsCount=0&listsCount=0&quotesQueryId=tss_match_phrase_query';
+    let res = undefined;
+    let data;
+    while (true) {
 
-    let headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.109 Safari/537.36',
-    };
+        let url = 'https://query1.finance.yahoo.com/v1/finance/search?q=' + inData + '&quotesCount=1&newsCount=0&listsCount=0&quotesQueryId=tss_match_phrase_query';
 
-    let resp = UrlFetchApp.fetch(url, { 'headers': headers });
-    let data = JSON.parse(resp.getContentText());
+        let headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.109 Safari/537.36',
+        };
 
-    if ('quotes' in data && data['quotes'].length > 0) {
-        return data['quotes'][0]['symbol'];
-    } else {
-        return undefined;
+        let resp = UrlFetchApp.fetch(url, {'headers': headers});
+        data = JSON.parse(resp.getContentText());
+
+        if ('quotes' in data && data['quotes'].length > 0) {
+            Logger.log(res);
+            if (res === data['quotes'][0]['symbol']){
+                return res;
+            }
+            res = data['quotes'][0]['symbol'];
+            inData = data['quotes'][0]['shortname']
+        } else {
+            return res;
+        }
     }
 }
 
@@ -654,11 +664,13 @@ function SEARCH_SYMBOL_YAHOO(data) {
 // Return the price of a stock on a given date.
 // If the stock price is not available, return undefined.
 let getPriceFromYahooHistoric = (symbol, date) => {
-    // Construct the URL for the Yahoo Finance.
+    if (symbol === "#ERROR!") return undefined;
+    if (symbol === "#NUM!") return undefined;
 
+    // Construct the URL for the Yahoo Finance.
     let url = "https://query1.finance.yahoo.com/v7/finance/download/" + symbol + "?period1=0&period2=9999999999&interval=1d&events=history&includeAdjustedClose=true";
     // Fetch the CSV data from the API.
-    let response = UrlFetchApp.fetch(url);
+    let response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
 
     // Parse the CSV data.
     let csvData = Utilities.parseCsv(response.getContentText());
@@ -824,7 +836,7 @@ let addDealRes = (sheet, column, row, bufResult, taxes, ISINtax, year) => {
 }
 
 let getPrice30Days = (symbol) => {
-    return getPriceFromYahooHistoric(symbol, new Date(new Date().getDate() - 30));
+    return getPriceFromYahooHistoric(symbol, new Date(new Date().setDate((new Date()).getDate() - 30)));
 }
 
 /**
@@ -838,7 +850,7 @@ function GET_PRICE_30_DAYS_YAHOO(symbol) {
 }
 
 let getPrice90Days = (symbol) => {
-    return getPriceFromYahooHistoric(symbol, new Date(new Date().getDate() - 90));
+    return getPriceFromYahooHistoric(symbol, new Date(new Date().setDate((new Date()).getDate() - 90)));
 }
 
 /**
@@ -848,6 +860,19 @@ let getPrice90Days = (symbol) => {
  */
 function GET_PRICE_90_DAYS_YAHOO(symbol) {
     return getPrice90Days(symbol);
+}
+
+let getPrice365Days = (symbol) => {
+    return getPriceFromYahooHistoric(symbol, new Date(new Date().setDate((new Date()).getDate() - 365)));
+}
+
+/**
+ * Returns price from finance.yahoo.com now() - 365days
+ * @param {string} symbol symbol from finance.yahoo.com
+ * @returns number from finance.yahoo.com
+ */
+function GET_PRICE_365_DAYS_YAHOO(symbol) {
+    return getPrice365Days(symbol);
 }
 
 // let getDataFromBoerseStuttgart = (ISIN) => {
