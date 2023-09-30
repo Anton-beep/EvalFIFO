@@ -1,53 +1,54 @@
+// test
+
 const COLUMNS_NAMES = {
-    'cost': ['abrechnungsbetrag in fondswährung', 'kundenendbetrag eur'],
-    'currencies': ['fondswährung', 'währung'],
-    'dates': ['abrechnungstag', 'buchungsdatum'],
-    'ISIN': ['isin'],
-    'kurses': ['abrechnungspreis', 'kurs'],
-    'quantities': ['stücke/nom.', 'anteile'],
-    'typesOfDeals': ['transaktion', 'geschäftsart']
+    "cost": ["abrechnungsbetrag in fondswährung", "kundenendbetrag eur"],
+    "currencies": ["fondswährung", "währung"],
+    "dates": ["abrechnungstag", "buchungsdatum"],
+    "ISIN": ["isin"],
+    "kurses": ["abrechnungspreis", "kurs"],
+    "quantities": ["stücke/nom.", "anteile"],
+    "typesOfDeals": ["transaktion", "geschäftsart"]
 }
 
 const DEAL_TYPE = {
-    'buy': ['kauf aus sparplan',
-        'kauf',
-        'ertrag wiederanlage',
-        'tausch (kauf)',
-        'fondsmerge steuerpflichtig (zugang)',
-        'kauf',
-        'tausch gesamt (kauf)',
-        'fondsmerge steuerneutral (zugang)'],
-    'ignore': ['steuererstattung',
-        'ertrag',
-        'ertrag auszahlung',
-        'vorabpauschale abrechnung lastschrift',
-        'steuererstattung',
-        'steuerforderung',
-        'vorabpauschale abrechnung',
-        'entgeltbelastung',
-        'delta-korrektur abgang',
-        'storno ertrag ohne wiederanlage'],
-    'sell': ['tausch (verkauf)',
-        'verkauf',
-        'tausch (verkauf)',
-        'fondsmerge steuerpflichtig (abgang)',
-        'vorabpauschale verkauf',
-        'storno verkauf',
-        'tausch gesamt (verkauf)',
-        'fondsmerge steuerneutral (abgang)']
+    "buy": ["kauf aus sparplan",
+        "kauf",
+        "ertrag wiederanlage",
+        "tausch (kauf)",
+        "fondsmerge steuerpflichtig (zugang)",
+        "tausch gesamt (kauf)",
+        "fondsmerge steuerneutral (zugang)"],
+    "ignore": ["steuererstattung",
+        "ertrag",
+        "ertrag auszahlung",
+        "vorabpauschale abrechnung lastschrift",
+        "steuererstattung",
+        "steuerforderung",
+        "vorabpauschale abrechnung",
+        "entgeltbelastung",
+        "delta-korrektur abgang",
+        "storno ertrag ohne wiederanlage"],
+    "sell": ["tausch (verkauf)",
+        "verkauf",
+        "tausch (verkauf)",
+        "fondsmerge steuerpflichtig (abgang)",
+        "vorabpauschale verkauf",
+        "storno verkauf",
+        "tausch gesamt (verkauf)",
+        "fondsmerge steuerneutral (abgang)"]
 }
 
 const TAXES_SHEET_NAME = ["taxes", "steuern_isin"];
 
 const TAXES_COLUMNS_NAMES = {
-    'basiszins': ['basiszins'],
-    'basiszinsanteil': ['basiszinssatz anteil'],
-    'basiszinssatz': ['basiszinssatz'],
-    'bbzinsen': ['bundesbank zinsen'],
-    'kapital': ['kapitalertragsteuer'],
-    'solidar': ['solidaritätszuschlag'],
-    'tax': ['steuer', 'tax'],
-    'year': ['jahr', 'year']
+    "basiszins": ["basiszins"],
+    "basiszinsanteil": ["basiszinssatz anteil"],
+    "basiszinssatz": ["basiszinssatz"],
+    "bbzinsen": ["bundesbank zinsen"],
+    "kapital": ["kapitalertragsteuer"],
+    "solidar": ["solidaritätszuschlag"],
+    "tax": ["steuer", "tax"],
+    "year": ["jahr", "year"]
 }
 
 
@@ -83,7 +84,7 @@ function menuItemEval() {
         } else if (COLUMNS_NAMES.quantities.includes(lower_data)) {
             columns.quantities = i;
         } else if (COLUMNS_NAMES.cost.includes(lower_data)) {
-            columns.cost = i;
+            columns.cost = parseFloat(i);
         } else if (COLUMNS_NAMES.currencies.includes(lower_data)) {
             columns.currencies = i;
         } else if (COLUMNS_NAMES.kurses.includes(lower_data)) {
@@ -114,11 +115,14 @@ function menuItemEval() {
             throw "input arguments have different length";
         }
     }
-
-    if (sheet.getRange(1, sheet.getLastColumn() - 6, 1, 7).getValues().toString() == [["Nettogewinne", "Gewinne/Verluste", "Teilfreistellung", "Gewinne/Verluste ohne Teilfreistellung", "Steuerabzug, eur", "Kapitalertragsteuer", "Solidaritätszuschlag"]].toString()) {
-        evalFifo(dataToEval[0], dataToEval[1], dataToEval[2], dataToEval[3], dataToEval[4], dataToEval[5], dataToEval[6], sheet.getLastColumn() - 6);
+    
+    let lastColInd = sheet.getLastColumn();
+    if (sheet.getRange(1, lastColInd - 6, 1, 7).getValues().toString() === [["Nettogewinne", "Gewinne/Verluste", "Teilfreistellung", "Gewinne/Verluste ohne Teilfreistellung", "Steuerabzug, eur", "Kapitalertragsteuer", "Solidaritätszuschlag"]].toString()) {
+        // clear old results
+        sheet.getRange(1, lastColInd - 6, sheet.getLastRow(), 7).clearContent();
+        evalFifo(dataToEval[0], dataToEval[1], dataToEval[2], dataToEval[3], dataToEval[4], dataToEval[5], dataToEval[6], lastColInd - 6);
     } else {
-        evalFifo(dataToEval[0], dataToEval[1], dataToEval[2], dataToEval[3], dataToEval[4], dataToEval[5], dataToEval[6], sheet.getLastColumn() + 1);
+        evalFifo(dataToEval[0], dataToEval[1], dataToEval[2], dataToEval[3], dataToEval[4], dataToEval[5], dataToEval[6], lastColInd + 1);
     }
 }
 
@@ -150,6 +154,8 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
     for (let i = 0; i < dates.length; i++) {
         let bufMap = new Map();
 
+        bufMap.set("addresToWrite", i + 2)
+
         let bufDate = convertStrToDate(dates[i]);
 
         if (isNaN(bufDate)) {
@@ -159,7 +165,7 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
 
         bufMap.set("date", bufDate);
         bufMap.set("ISIN", ISINs[i]);
-        
+
         dealTypeLower = typesOfDeals[i].toLowerCase();
         // figure out type of deal
         if (DEAL_TYPE.buy.includes(dealTypeLower)) {
@@ -181,13 +187,18 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
             bufMap.set("quantity", quantities[i]);
         }
 
+        if (isNaN(cost[i])) {
+            throw "element in cost is not a number (row: " + (i + 2) + ")";
+        } else if (cost[i] === undefined || cost[i] === null || cost[i] === "") {
+            throw "zero value in cost (row: " + (i + 2) + ")";
+        }
+
         if (bufMap.get("typeOfDeal") === "Verkauf" && cost[i] < 0) {
             bufMap.set("cost", -cost[i]);
-            bufMap.set("kurs", Math.abs(cost[i] / bufMap.get("quantity")));
         } else {
             bufMap.set("cost", cost[i]);
-            bufMap.set("kurs", Math.abs(cost[i] / bufMap.get("quantity")));
         }
+        bufMap.set("kurs", Math.abs(cost[i] / bufMap.get("quantity")));
 
         bufMap.set("currency", currencies[i]);
 
@@ -232,7 +243,6 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
 
     let taxes = new Map();
     // search for sheet name
-    let sheets = ss.getSheets();
     let leftYears = [...years];
     let taxSheet = null;
     for (i = 0; i < TAXES_SHEET_NAME.length; i++) {
@@ -298,10 +308,9 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
     // collect ISIN taxes
     let ISINtaxes = new Map();
     let leftISINs = [...ISINsUnique];
-    let flagISINTaxSheetFound = false;
-    
+
     // searching for columns in sheet
-    let ISINColumns = {"ISIN": undefined, "teilfreistellung": undefined};
+    let ISINColumns = { "ISIN": undefined, "teilfreistellung": undefined };
     for (i = 1; i < taxSheet.getLastColumn() + 1; i++) {
         let buf = taxSheet.getRange(1, i).getValue();
         if (buf.toLowerCase() === "isin") {
@@ -339,17 +348,11 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
     }
 
     let ISINrecords = new Map();
-    let result = [];
 
     // write result column 
-    var sheet = ss.getActiveSheet();
+    const sheet = ss.getActiveSheet();
 
     let headers = ["Nettogewinne", "Gewinne/Verluste", "Teilfreistellung", "Gewinne/Verluste ohne Teilfreistellung", "Steuerabzug, eur", "Kapitalertragsteuer", "Solidaritätszuschlag"];
-
-    sheet.getRange(1, columnToPasteRes, 1, headers.length).setValues([headers]);
-    for (let i = 1; i < result.length; i++) {
-        sheet.getRange(i + 1, columnToPasteRes).setValue(result[i - 1]);
-    }
 
     for (let i = 0; i < data.length; i++) {
         let nowKey = data[i].get("ISIN") + " " + data[i].get("currency");
@@ -369,7 +372,6 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
             }
         }
 
-
         if (currentBalace.get(nowKey) === 0) {
             // first deal with this ISIN
             //Logger.log("first deal with this ISIN")
@@ -381,6 +383,10 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
             currentBalace.set(nowKey, currentBalace.get(nowKey) + data[i].get("quantity"));
             ISINrecords.get(nowKey).push(data[i]);
         } else if (currentBalace.get(nowKey) > 0 && data[i].get("typeOfDeal") === "Verkauf") {
+            if (currentBalace.get(nowKey) < data[i].get("quantity")) {
+                throw "not enough quantity in row " + (i + 2);
+            }
+
             // need to evaluate result
             //Logger.log("need to evaluate result Verkauf")
             let records = ISINrecords.get(nowKey);
@@ -389,23 +395,13 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
             let [bufRecords, bufBalance, bufResult] = processDeal(records, balance, lastDeal);
             ISINrecords.set(nowKey, bufRecords);
             currentBalace.set(nowKey, bufBalance);
-            
-            Logger.log(ISINtaxes.get(nowKey.split(" ")[0]))
-            addDealRes(sheet, columnToPasteRes, i + 2, bufResult, taxes, ISINtaxes.get(nowKey.split(" ")[0]), data[i].get("date").getFullYear());
+
+            //Logger.log(ISINtaxes.get(nowKey.split(" ")[0]))
+            //Logger.log("write to row %s result %s", data[i].get("addresToWrite"), bufResult)
+            addDealRes(sheet, columnToPasteRes, data[i].get("addresToWrite"), bufResult, taxes, ISINtaxes.get(nowKey.split(" ")[0]), data[i].get("date").getFullYear());
             resultsForNewSheet.get(nowKey).set(data[i].get("date").getFullYear(), resultsForNewSheet.get(nowKey).get(data[i].get("date").getFullYear()) + bufResult);
         } else if (currentBalace.get(nowKey) < 0 && data[i].get("typeOfDeal") === "Kauf") {
-            // need to evaluate result
-            //Logger.log("need to evaluate result Kauf")
-            let records = ISINrecords.get(nowKey);
-            let lastDeal = data[i];
-            let balance = currentBalace.get(nowKey);
-            let [bufRecords, bufBalance, bufResult] = processDeal(records, balance, lastDeal);
-            ISINrecords.set(nowKey, bufRecords);
-            currentBalace.set(nowKey, bufBalance);
-            
-            Logger.log(ISINtaxes.get(nowKey.split(" ")[0]))
-            addDealRes(sheet, columnToPasteRes, i + 2, bufResult, taxes, ISINtaxes.get(nowKey.split(" ")[0]), data[i].get("date").getFullYear());
-            resultsForNewSheet.get(nowKey).set(data[i].get("date").getFullYear(), resultsForNewSheet.get(nowKey).get(data[i].get("date").getFullYear()) + bufResult);
+            throw "short detected in row " + (i + 2);
         } else if (currentBalace.get(nowKey) < 0) {
             // just add to current balance, no result
             //Logger.log("just add to current balance, no result")
@@ -483,8 +479,8 @@ let evalFifo = (dates, ISINs, typesOfDeals, quantities, cost, currencies, kurses
 
     let keysNewSheet = Array.from(resultsForNewSheet.keys());
 
-    // check if list with name Ergebnisse (generated by script) is already exist
-    let name = "Ergebnisse (generated by script)";
+    // check if list with name Ergebnisse (script) is already exist
+    let name = "Ergebnisse (script)";
     let nowDate = new Date();
     nowDate.setHours(nowDate.getHours() + 2);
     if (ss.getSheetByName(name) !== null) {
@@ -578,14 +574,17 @@ let processDeal = (records, balance, lastDeal) => {
     let result = 0;
     let newBalance = balance;
 
-    //Logger.log("lastDeal: %s", lastDeal.get("quantity"));
+    //Logger.log("lastDeal: %s", lastDeal.get("kurs"));
 
     for (let i = 0; i < records.length; i++) {
         if (Math.abs(records[i].get("quantity")) >= Math.abs(lastDeal.get("quantity"))) {
+            //Logger.log("%s %s", lastDeal.get("kurs"), records[i].get("kurs"))
+
             result += (lastDeal.get("kurs") - records[i].get("kurs")) * Math.abs(lastDeal.get("quantity"));
             newBalance += lastDeal.get("quantity");
             //Logger.log("newBalance: %s ; result: %s ; recordQuant: %s", newBalance, result, records[i].get("quantity"));
             records[i].set("quantity", records[i].get("quantity") + lastDeal.get("quantity"));
+
             return [records, newBalance, result];
         }
         else {
@@ -598,8 +597,9 @@ let processDeal = (records, balance, lastDeal) => {
         }
         //Logger.log("lastDeal: %s", lastDeal.get("quantity"));
 
-        if (lastDeal.get("quantity") == 0) {
+        if (lastDeal.get("quantity") === 0) {
             //Logger.log("lastDeal == 0 -- newBalance: %s ; result: %s ; recordQuant: %s", newBalance, result, records[i].get("quantity"));
+
             return [records, newBalance, result];
         }
     }
@@ -608,6 +608,7 @@ let processDeal = (records, balance, lastDeal) => {
     records.push(lastDeal);
     newBalance -= lastDeal.get("quantity");
 
+    //Logger.log(newBalance);
     return [records, newBalance, result];
 }
 
@@ -703,9 +704,9 @@ let getPriceFromYahooLastInYear = (symbol, year) => {
     // Search for the date in the CSV data.
     for (let i = 0; i < csvData.length; i++) {
         // Return the stock price if the date matches.
-        if (csvData[i][0].slice(0, 4) == year) {
+        if (csvData[i][0].slice(0, 4) === year) {
             flagYearFound = true;
-        } else if (csvData[i][0].slice(0, 4) != year && flagYearFound) {
+        } else if (csvData[i][0].slice(0, 4) !== year && flagYearFound) {
             return Number(csvData[i - 1][4]);
         }
     }
@@ -742,7 +743,7 @@ let getPriceFromYahooFirstInYear = (symbol, year) => {
     // Search for the date in the CSV data.
     for (let i = 0; i < csvData.length; i++) {
         // Return the stock price if the date matches.
-        if (csvData[i][0].slice(0, 4) == year) {
+        if (csvData[i][0].slice(0, 4) === year) {
             return Number(csvData[i][4]);
         }
     }
@@ -755,7 +756,7 @@ let getPriceFromYahooFirstInYear = (symbol, year) => {
  * Returns first price in year from finance.yahoo.com
  * @param {string} symbol symbol from finance.yahoo.com
  * @param {string} year year
- * @return first price in year from finance.yahoo.com
+ * @return number price in year from finance.yahoo.com
  * @customfunction
 */
 function GET_PRICE_FIRST_IN_YEAR_YAHOO(symbol, year) {
@@ -778,17 +779,16 @@ let getPriceFromYahooRealTime = (symbol) => {
     let endInd = contentText.indexOf(`"`, startInd + 1);
 
     // Extract the price from the string and convert it to a number
-    let price = Number(contentText.substring(startInd, endInd));
-    Logger.log(startInd);
-    Logger.log(price);
-    Logger.log(contentText.substring(startInd, endInd));
-    return price;
+    //Logger.log(startInd);
+    //Logger.log(price);
+    //Logger.log(contentText.substring(startInd, endInd));
+    return Number(contentText.substring(startInd, endInd));
 }
 
 /**
  * Returns price from finance.yahoo.com
  * @param {string} symbol symbol from finance.yahoo.com
- * @return price from finance.yahoo.com
+ * @return number from finance.yahoo.com
  * @customfunction
 */
 function GET_PRICE_REAL_TIME_YAHOO(symbol) {
@@ -819,6 +819,50 @@ let addDealRes = (sheet, column, row, bufResult, taxes, ISINtax, year) => {
     );
 }
 
+let getPrice30Days = (symbol) => {
+    return getPriceFromYahooHistoric(symbol, new Date(new Date().getDate() - 30));
+}
+
+/**
+ * Returns price from finance.yahoo.com now() - 30days
+ * @param {string} symbol symbol from finance.yahoo.com
+ * @return number from finance.yahoo.com
+ * @customfunction
+ */
+function GET_PRICE_30_DAYS_YAHOO(symbol) {
+    return getPrice30Days(symbol);
+}
+
+let getPrice90Days = (symbol) => {
+    return getPriceFromYahooHistoric(symbol, new Date(new Date().getDate() - 90));
+}
+
+/**
+ * Returns price from finance.yahoo.com now() - 90days
+ * @param {string} symbol symbol from finance.yahoo.com
+ * @return number from finance.yahoo.com
+ */
+function GET_PRICE_90_DAYS_YAHOO(symbol) {
+    return getPrice90Days(symbol);
+}
+
+// let getDataFromBoerseStuttgart = (ISIN) => {
+//     let url = "https://www.boerse-stuttgart.de/api/bsg-feature-navigation/Search/PostSearchInput" + ISIN;
+//     let params = {
+//         "searchInput": ISIN,
+//         "language": "en",
+//         "datasource": "5849b3c3-7bd3-4570-9fed-df92b0788426"
+//     }
+//
+//     let response = UrlFetchApp.fetch(url, {
+//         'method': 'post',
+//         'contentType': 'application/json',
+//         'payload': JSON.stringify(params)
+//     });
+//
+//     return response.getContentText();
+// }
+
 // -------------------------------------------------------------------------------------------------------------------------------------------
 
 function getOnvistaPrice(fundCode) {
@@ -829,12 +873,10 @@ function getOnvistaPrice(fundCode) {
     const response = UrlFetchApp.fetch(url);
 
     // Antwort der API abfragen
-    if (response.getResponseCode() == 200) {
+    if (response.getResponseCode() === 200) {
         // Kurs des Fonds aus der Antwort der API extrahieren
-        const fundPrice = response.getContentText().split(":")[1].trim();
-
         // Kurs des Fonds zurückgeben
-        return fundPrice;
+        return response.getContentText().split(":")[1].trim();
     } else {
         // Fehlermeldung ausgeben
         const errorMessage = response.getResponseCode() + ": " + response.getContentText();
